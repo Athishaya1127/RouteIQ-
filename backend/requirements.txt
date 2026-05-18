@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+ortools
+requests
+pydantic
+pydantic-settings
+python-dotenv
+httpx
+sqlalchemy
+scikit-learn
+websockets
