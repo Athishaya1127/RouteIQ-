@@ -61,20 +61,44 @@ for edge in ROAD_EDGES:
 def get_node_coords(node_id: str) -> list[float]:
     return CHENNAI_NODES.get(node_id, {"coords": [80.2707, 13.0827]})["coords"]
 
+REAL_ROAD_GEOMETRIES = {}
+
 def get_interpolated_geometry(start_node: str, end_node: str) -> list[list[float]]:
     """
-    Simulates actual road curvature geometry by interpolating between two nodes.
+    Retrieves the actual street geometry between two Chennai junctions.
+    Uses cached OpenRouteService Directions API to follow real roads, with simple curve fallback.
     """
+    key = (start_node, end_node)
+    rev_key = (end_node, start_node)
+    
+    if key in REAL_ROAD_GEOMETRIES:
+        return REAL_ROAD_GEOMETRIES[key]
+    if rev_key in REAL_ROAD_GEOMETRIES:
+        # Reverse geometry coordinate order
+        rev_geom = [coord.copy() for coord in REAL_ROAD_GEOMETRIES[rev_key]]
+        rev_geom.reverse()
+        return rev_geom
+
+    # Call ORS to fetch actual road coordinates
     c1 = get_node_coords(start_node)
     c2 = get_node_coords(end_node)
-    # Return 3 points (start, mid with slight curvature offset, end) in [lat, lng] for Leaflet
+    
+    try:
+        from backend.services.routing_api import get_full_route_details
+        leaflet_coords, _ = get_full_route_details([c1, c2])
+        if leaflet_coords:
+            REAL_ROAD_GEOMETRIES[key] = leaflet_coords
+            return leaflet_coords
+    except Exception as e:
+        print(f"[road_graph] Failed to fetch real street geometry: {e}")
+
+    # Fallback to simple curved line if API is rate-limited or fails
     mid = [(c1[0] + c2[0])/2, (c1[1] + c2[1])/2]
-    # Add minor curved offset to look like a realistic road path
     mid[0] += 0.002
     mid[1] += 0.002
-    
-    # Leaflet expects [latitude, longitude]
-    return [[c1[1], c1[0]], [mid[1], mid[0]], [c2[1], c2[0]]]
+    fallback_geom = [[c1[1], c1[0]], [mid[1], mid[0]], [c2[1], c2[0]]]
+    return fallback_geom
+
 
 def snap_location_to_graph(lat: float, lng: float) -> str:
     """
@@ -145,11 +169,12 @@ def time_dependent_dijkstra(start_node: str, end_node: str, departure_time: date
     Finds the optimal road path between start and end node considering dynamic future traffic.
     """
     if start_node == end_node:
-        return 0.0, 0.0, [], []
+        return 0.0, 0.0, [], [], []
 
     # Priority queue: (cost, travel_time_mins, node, path_edges)
     queue = [(0.0, 0.0, start_node, [])]
     visited = {}
+    evaluated_congested_edges = {}
 
     while queue:
         cost, elapsed_time, current_node, path = heapq.heappop(queue)
@@ -183,8 +208,15 @@ def time_dependent_dijkstra(start_node: str, end_node: str, departure_time: date
                 })
                 
                 current_eta += timedelta(minutes=e_travel)
-                
-            return cost, elapsed_time, geometry, segment_details
+            
+            # Filter out any edges that are part of the final selected optimal path
+            optimal_edge_ids = {edge["edge_id"] for edge in path}
+            rejected_edges = [
+                val for edge_id, val in evaluated_congested_edges.items()
+                if edge_id not in optimal_edge_ids
+            ]
+            
+            return cost, elapsed_time, geometry, segment_details, rejected_edges
 
         if current_node in visited and visited[current_node] <= cost:
             continue
@@ -197,7 +229,31 @@ def time_dependent_dijkstra(start_node: str, end_node: str, departure_time: date
                 
                 # Estimate future arrival time at this edge
                 edge_departure = departure_time + timedelta(minutes=elapsed_time)
-                e_travel, _, e_cost = compute_edge_metrics(edge, edge_departure)
+                e_travel, e_congestion, e_cost = compute_edge_metrics(edge, edge_departure)
+                
+                # Smart Rejection threshold check
+                free_flow_time = (edge["length"] / edge["avg_speed"]) * 60.0
+                eta_delay = e_travel - free_flow_time
+                
+                if e_congestion > 0.40 or eta_delay > 4.0 or e_congestion > 0.75:
+                    geom = get_interpolated_geometry(edge["start"], edge["end"])
+                    
+                    if e_congestion > 0.75:
+                        reason = f"Severe traffic bottleneck ({int(e_congestion*100)}%) with +15.0 score penalty applied."
+                    elif eta_delay > 4.0:
+                        reason = f"Severe travel delay predicted (+{round(eta_delay, 1)} mins over free-flow)."
+                    else:
+                        reason = f"Moderate predicted congestion ({int(e_congestion*100)}%)."
+                        
+                    evaluated_congested_edges[edge["edge_id"]] = {
+                        "edge_id": edge["edge_id"],
+                        "road_name": edge["road_name"],
+                        "geometry": geom,
+                        "predicted_congestion": round(e_congestion, 2),
+                        "travel_time": round(e_travel, 2),
+                        "estimated_arrival_time": edge_departure.strftime("%I:%M %p"),
+                        "rejection_reason": reason
+                    }
                 
                 new_cost = cost + e_cost
                 new_elapsed = elapsed_time + e_travel
@@ -205,4 +261,4 @@ def time_dependent_dijkstra(start_node: str, end_node: str, departure_time: date
                 heapq.heappush(queue, (new_cost, new_elapsed, next_node, path + [edge]))
 
     # Fallback to direct VRP sequence if graph fails
-    return 999.0, 999.0, [], []
+    return 999.0, 999.0, [], [], []

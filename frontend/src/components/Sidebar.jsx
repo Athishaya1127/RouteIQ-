@@ -13,13 +13,13 @@ const Sidebar = ({
   const partners = locations.filter(loc => loc.type === 'partner');
 
   return (
-    <div className="w-80 bg-white shadow-xl flex flex-col h-full z-10">
-      <div className="p-6 bg-slate-900 text-white">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Route className="text-green-400" />
+    <div className="w-80 bg-white shadow-xl flex flex-col h-full z-10 border-r border-slate-200/80">
+      <div className="p-6 bg-white border-b border-slate-100">
+        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+          <Route className="text-indigo-600 stroke-[2.5]" size={26} />
           RouteIQ
         </h1>
-        <p className="text-slate-400 text-sm mt-1">Shop-Based Delivery Assignment</p>
+        <p className="text-slate-400 text-[10px] mt-1 uppercase font-extrabold tracking-wider">Shop-Based Delivery Assignment</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">

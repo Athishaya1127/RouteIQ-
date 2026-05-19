@@ -169,6 +169,46 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
           );
         })}
 
+        {/* ML Demand Forecasting Hotspots Overlay */}
+        {simulationData && simulationData.orchestration && simulationData.orchestration.demand_forecasts && 
+          Object.entries(simulationData.orchestration.demand_forecasts).map(([zoneName, demandVal], idx) => {
+            const coords = ZONES_COORDS[zoneName];
+            if (!coords || demandVal <= 0.40) return null; // Only show significant hotspots
+            
+            return (
+              <Circle
+                key={`demand-${idx}`}
+                center={coords}
+                radius={1500}
+                eventHandlers={{
+                  click: (e) => {
+                    if (onAddLocation) {
+                      onAddLocation(e.latlng);
+                    }
+                  }
+                }}
+                pathOptions={{
+                  fillColor: '#8b5cf6', // Indigo/Purple
+                  fillOpacity: 0.15 + (demandVal * 0.1),
+                  color: '#6d28d9',
+                  weight: demandVal > 0.70 ? 2 : 1,
+                  dashArray: demandVal > 0.70 ? '4, 8' : undefined
+                }}
+              >
+                <Tooltip sticky>
+                  <div className="font-sans text-xs p-1">
+                    <strong className="text-purple-700 block mb-0.5">🔮 ML Demand Forecast</strong>
+                    Zone: <strong>{zoneName}</strong>
+                    <br/>
+                    Expected Order Density: <strong>{Math.round(demandVal * 100)}%</strong>
+                    {demandVal > 0.70 && <span className="block text-red-500 font-extrabold mt-1 animate-pulse">⚠️ Spike Looming!</span>}
+                  </div>
+                </Tooltip>
+              </Circle>
+            );
+          })
+        }
+
         {/* Previous Faded Route */}
         {previousRoute && <RouteVisualizer result={previousRoute} isPrevious={true} />}
 
@@ -176,6 +216,23 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
         {result && <RouteVisualizer result={result} isPrevious={false} />}
 
       </MapContainer>
+
+      {/* Map Legend overlay */}
+      {result && (
+        <div className="absolute bottom-6 left-6 bg-white/95 backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-slate-200/80 z-[1000] font-sans text-xs flex flex-col gap-2.5 min-w-[200px]">
+          <div className="font-bold text-slate-800 tracking-wider uppercase text-[10px] border-b border-slate-100 pb-1.5">
+            🚦 AI Route Orchestrator
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="w-5 h-2 rounded-full bg-[#22c55e] inline-block shadow-sm shadow-green-500/50"></span>
+            <span className="font-semibold text-slate-700">AI Optimized Route</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="w-5 h-2 rounded-full bg-[#ef4444] border-dashed border border-red-500 inline-block shadow-sm shadow-red-500/50 animate-pulse"></span>
+            <span className="font-semibold text-slate-700">Future Congestion Avoided</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

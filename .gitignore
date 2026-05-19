@@ -11,13 +11,9 @@ frontend/.env
 frontend/.env.local
 routeiq.db
 *.db
-# Python cache
+
 __pycache__/
 *.pyc
-
-# Database
+ 
 *.db
-
-# ML models (optional)
-# Uncomment if you don't want model binaries
-# *.pkl
+ 

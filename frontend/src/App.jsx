@@ -41,16 +41,12 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'SIMULATION_TICK') {
           setSimulationData(data);
-
-          // Check for reroute trigger
-          if (data.traffic) {
-            const shouldReroute = data.traffic.some(t => t.reroute_triggered);
-            // In a real app, you'd only reroute if the current route goes through the zone
-            // For demo, we just trigger it if we have an active route
-            if (shouldReroute && optimizationResult && !isLoading) {
-              console.log("Auto rerouting triggered by AI prediction!");
-              handleOptimize(true); // Reuse existing function to fetch new route, pass true for isAutoReroute
-            }
+        } else if (data.type === 'ORCHESTRATION_EVENT') {
+          console.log("[Orchestrator] Proactive intervention event:", data.event);
+          if (data.event.new_route) {
+            setPreviousRoute(optimizationResult);
+            setOptimizationResult(data.event.new_route);
+            setSuccessMessage(`Proactive Intervention: ${data.event.reason}`);
           }
         }
       } catch (err) {

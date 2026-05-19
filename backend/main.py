@@ -83,7 +83,7 @@ async def optimize_route(request: OptimizeRequest):
             node_i = snapped_nodes[i]
             node_j = snapped_nodes[j]
             
-            cost, dur_mins, geom, segments_info = time_dependent_dijkstra(node_i, node_j, departure_time)
+            cost, dur_mins, geom, segments_info, rejected = time_dependent_dijkstra(node_i, node_j, departure_time)
             
             dist_km = sum(s["length"] for s in segments_info) if segments_info else 0.0
             if dist_km == 0.0:
@@ -94,6 +94,7 @@ async def optimize_route(request: OptimizeRequest):
                 dur_mins = dist_km / (settings.AVERAGE_SPEED_KMPH / 60.0)
                 cost = dist_km
                 geom = [[lat1, lng1], [lat2, lng2]]
+                rejected = []
                 segments_info = [{
                     "edge_id": f"connector_{i}_{j}",
                     "road_name": "Connector Link",
@@ -112,7 +113,8 @@ async def optimize_route(request: OptimizeRequest):
             fuel_matrix[i][j] = dist_km * 0.12 # approx fuel rate
             paths_cache[(i, j)] = {
                 "geometry": geom,
-                "segments": segments_info
+                "segments": segments_info,
+                "rejected_edges": rejected
             }
 
     # 4. Solve VRP
@@ -142,6 +144,18 @@ async def optimize_route(request: OptimizeRequest):
     r_cost = 0.0
     r_fuel = 0.0
 
+    all_rejected_edges = {}
+    
+    ordered_locations = [filtered_locations[idx] for idx in raw_route]
+    ors_coords = [[loc.lng, loc.lat] for loc in ordered_locations]
+    
+    # Query OpenRouteService Directions API for actual street geometries
+    leaflet_coords, ors_segments = get_full_route_details(ors_coords)
+    use_ors = bool(leaflet_coords and ors_segments and len(ors_segments) == len(raw_route) - 1)
+    
+    if use_ors:
+        full_route_geometry = leaflet_coords
+
     for i in range(len(raw_route) - 1):
         from_idx = raw_route[i]
         to_idx = raw_route[i+1]
@@ -150,34 +164,69 @@ async def optimize_route(request: OptimizeRequest):
         r_fuel += fuel_matrix[from_idx][to_idx]
 
         path_data = paths_cache.get((from_idx, to_idx), None)
-        if path_data:
-            geom = path_data["geometry"]
-            segs = path_data["segments"]
+        rejected = path_data.get("rejected_edges", []) if path_data else []
+        for r_edge in rejected:
+            all_rejected_edges[r_edge["edge_id"]] = r_edge
+
+        if use_ors:
+            ors_seg = ors_segments[i]
             
-            if not full_route_geometry:
-                full_route_geometry.extend(geom)
+            # Extract dynamic traffic metrics from our predictive model
+            if path_data and path_data.get("segments"):
+                avg_congestion = sum(s["predicted_congestion"] for s in path_data["segments"]) / len(path_data["segments"])
+                dur = sum(s["travel_time"] for s in path_data["segments"])
             else:
-                full_route_geometry.extend(geom[1:])
+                avg_congestion = 0.1
+                dur = ors_seg["duration"]
+
+            s_arrival = current_time_tracker.strftime("%I:%M %p")
+            
+            segments.append({
+                "from_id": filtered_locations[from_idx].id,
+                "to_id": filtered_locations[to_idx].id,
+                "edge_id": f"leg_{from_idx}_{to_idx}",
+                "road_name": f"Street Route ({filtered_locations[from_idx].id} → {filtered_locations[to_idx].id})",
+                "distance": round(ors_seg["distance"], 2),
+                "duration": round(dur, 2),
+                "geometry": ors_seg["geometry"],
+                "congestion": round(avg_congestion, 2),
+                "estimated_arrival_time": s_arrival,
+                "adjusted_edge_cost": round(cost_matrix[from_idx][to_idx], 2)
+            })
+            
+            current_time_tracker += timedelta(minutes=dur)
+            total_dist += ors_seg["distance"]
+            total_dur += dur
+        else:
+            # Robust Fallback to snapped road-graph/straight-line geometries
+            if path_data:
+                geom = path_data["geometry"]
+                segs = path_data["segments"]
                 
-            for s in segs:
-                s_arrival = current_time_tracker.strftime("%I:%M %p")
-                
-                segments.append({
-                    "from_id": filtered_locations[from_idx].id,
-                    "to_id": filtered_locations[to_idx].id,
-                    "edge_id": s["edge_id"],
-                    "road_name": s["road_name"],
-                    "distance": s["length"],
-                    "duration": s["travel_time"],
-                    "geometry": s["geometry"],
-                    "congestion": s["predicted_congestion"],
-                    "estimated_arrival_time": s_arrival,
-                    "adjusted_edge_cost": s["adjusted_edge_cost"]
-                })
-                
-                current_time_tracker += timedelta(minutes=s["travel_time"])
-                total_dist += s["length"]
-                total_dur += s["travel_time"]
+                if not full_route_geometry:
+                    full_route_geometry.extend(geom)
+                else:
+                    full_route_geometry.extend(geom[1:])
+                    
+                for s in segs:
+                    s_arrival = current_time_tracker.strftime("%I:%M %p")
+                    
+                    segments.append({
+                        "from_id": filtered_locations[from_idx].id,
+                        "to_id": filtered_locations[to_idx].id,
+                        "edge_id": s["edge_id"],
+                        "road_name": s["road_name"],
+                        "distance": s["length"],
+                        "duration": s["travel_time"],
+                        "geometry": s["geometry"],
+                        "congestion": s["predicted_congestion"],
+                        "estimated_arrival_time": s_arrival,
+                        "adjusted_edge_cost": s["adjusted_edge_cost"]
+                    })
+                    
+                    current_time_tracker += timedelta(minutes=s["travel_time"])
+                    total_dist += s["length"]
+                    total_dur += s["travel_time"]
 
     avg_congestion = sum(s["congestion"] for s in segments) / len(segments) if segments else 0.1
     if avg_congestion < 0.4:
@@ -187,15 +236,20 @@ async def optimize_route(request: OptimizeRequest):
     else:
         traffic_level = "Heavy"
 
-    # Map indices back to location IDs
-    ordered_locations = [filtered_locations[idx] for idx in raw_route]
+
+    # Filter rejected edges to only keep those NOT traversed anywhere in the final optimal VRP route
+    optimal_edge_ids = {s["edge_id"] for s in segments}
+    rejected_list = [
+        val for edge_id, val in all_rejected_edges.items()
+        if edge_id not in optimal_edge_ids
+    ]
 
     # Determine optimization reason
     opt_reason = f"Optimized using Time-Dependent Segment Routing (Departing at {departure_time.strftime('%I:%M %p')})."
     if traffic_level == "Heavy" or traffic_level == "Moderate":
         opt_reason += " AI routed around predicted future street bottlenecks."
 
-    return {
+    result_payload = {
         "route_version": f"v-{str(uuid.uuid4())[:8]}",
         "timestamp": datetime.now().isoformat(),
         "optimization_reason": opt_reason,
@@ -205,6 +259,7 @@ async def optimize_route(request: OptimizeRequest):
         "customers": [c.id for c in customers],
         "sequence": [loc.id for loc in ordered_locations],
         "segments": segments,
+        "rejected_edges": rejected_list,
         "total_distance": round(total_dist, 2),
         "total_duration": round(total_dur, 2),
         "cost": round(r_cost, 2),
@@ -212,6 +267,26 @@ async def optimize_route(request: OptimizeRequest):
         "traffic_level": traffic_level,
         "full_route_geometry": full_route_geometry
     }
+
+    import backend.services.global_state as global_state
+    global_state.active_request = request
+    global_state.active_route = result_payload
+
+    # Dynamically sync driver statuses with currently placed partners in request
+    active_partners = [loc.id for loc in request.locations if loc.type == "partner"]
+    new_driver_status = {}
+    for p_id in active_partners:
+        if p_id in global_state.driver_status:
+            new_driver_status[p_id] = global_state.driver_status[p_id]
+        else:
+            new_driver_status[p_id] = "idle"
+            
+    if request.selected_partner_id in new_driver_status:
+        new_driver_status[request.selected_partner_id] = "active"
+        
+    global_state.driver_status = new_driver_status
+
+    return result_payload
 
 @app.get("/route-summary")
 async def get_route_summary():

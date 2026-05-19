@@ -79,11 +79,20 @@ async def run_simulation():
             db.commit()
             db.close()
 
+            # Dynamic AI Orchestration Engine Run
+            from backend.services.orchestrator import evaluate_orchestration
+            try:
+                orchestration_data = await evaluate_orchestration()
+            except Exception as e:
+                print(f"[Orchestrator Error] Failed to evaluate orchestration: {e}")
+                orchestration_data = {"demand_forecasts": {}, "risk_score": None, "events": []}
+
             # Broadcast
             payload = {
                 "type": "SIMULATION_TICK",
                 "traffic": traffic_payloads,
-                "ai_events": ai_events
+                "ai_events": ai_events,
+                "orchestration": orchestration_data
             }
             
             await manager.broadcast(payload)
