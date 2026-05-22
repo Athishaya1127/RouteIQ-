@@ -56,3 +56,126 @@ body {
   width: 100%;
   height: 100vh;
 }
+
+/* Custom Partner Marker */
+.partner-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.partner-map-marker {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.partner-marker-bg {
+  width: 32px;
+  height: 32px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  border: 2.5px solid var(--partner-color, #22c55e);
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+
+.partner-map-marker:hover .partner-marker-bg {
+  transform: scale(1.15);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.partner-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.partner-marker-ring {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--partner-color, #22c55e);
+  opacity: 0.3;
+  z-index: 1;
+  animation: partner-pulse 2s infinite ease-out;
+}
+
+@keyframes partner-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Moving Bike Marker along the route */
+.moving-bike-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.moving-bike-marker-container {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  /* Smooth transform transitions for position and rotation! */
+  transition: transform 300ms linear;
+}
+
+.moving-bike-bg {
+  width: 38px;
+  height: 38px;
+  background: #1f2937; /* Dark slate background like Uber/Rapido branding */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.35);
+  border: 2px solid #ffffff;
+  z-index: 5;
+  position: relative;
+}
+
+.moving-bike-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Speed trail effect for moving bikes */
+.moving-bike-tail {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--partner-color, #22c55e);
+  opacity: 0.7;
+  z-index: 1;
+  filter: blur(1px);
+  animation: bike-trail-fade 0.8s infinite alternate;
+}
+
+@keyframes bike-trail-fade {
+  0% {
+    transform: scale(0.6) translate(-10px, 0);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1.1) translate(-18px, 0);
+    opacity: 0.8;
+  }
+}
+

@@ -1,6 +1,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import RouteVisualizer from './RouteVisualizer';
+import { VEHICLES_CONFIG } from './Sidebar';
 
 // Fix for default Leaflet icons in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -29,14 +30,36 @@ const customerIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-const partnerIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+const getPartnerIcon = (partnerId, result, vehicleType) => {
+  const emoji = VEHICLES_CONFIG[vehicleType]?.emoji || '🛵';
+  
+  let color = '#22c55e'; // Default partner green
+  if (result && result.routes) {
+    const route = result.routes[partnerId];
+    if (route && route.vehicle_index !== undefined) {
+      const idx = route.vehicle_index;
+      const colors = ['#22c55e', '#f97316', '#a855f7', '#eab308', '#64748b', '#000000', '#d97706'];
+      color = colors[idx % colors.length];
+    }
+  }
+
+  const html = `
+    <div class="partner-map-marker" style="--partner-color: ${color};">
+      <div class="partner-marker-ring"></div>
+      <div class="partner-marker-bg">
+        <span class="partner-emoji">${emoji}</span>
+      </div>
+    </div>
+  `;
+
+  return L.divIcon({
+    html: html,
+    className: 'partner-div-icon',
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
+  });
+};
 
 // Component to handle map clicks
 const MapEvents = ({ onAddLocation }) => {
@@ -48,7 +71,7 @@ const MapEvents = ({ onAddLocation }) => {
   return null;
 };
 
-const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulationData }) => {
+const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulationData, vehicleType }) => {
   const defaultCenter = [13.0827, 80.2707];
 
   const ZONES_COORDS = {
@@ -61,12 +84,26 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
   };
 
   const getStopInfo = (locId) => {
-    if (!result || !result.sequence) return null;
-    const stopIndex = result.sequence.indexOf(locId);
-    if (stopIndex !== -1) {
-      return {
-        stopNum: stopIndex + 1
-      };
+    if (!result) return null;
+    if (result.routes) {
+      for (const [partnerId, route] of Object.entries(result.routes)) {
+        const stopIndex = route.sequence.indexOf(locId);
+        if (stopIndex !== -1) {
+          const partnerName = partnerId.startsWith('part') ? `Partner ${partnerId.slice(4)}` : partnerId;
+          return {
+            stopNum: stopIndex + 1,
+            partnerName: partnerName
+          };
+        }
+      }
+    }
+    if (result.sequence) {
+      const stopIndex = result.sequence.indexOf(locId);
+      if (stopIndex !== -1) {
+        return {
+          stopNum: stopIndex + 1
+        };
+      }
     }
     return null;
   };
@@ -100,7 +137,7 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
             <Marker
               key={loc.id}
               position={[loc.lat, loc.lng]}
-              icon={loc.type === 'shop' ? shopIcon : loc.type === 'partner' ? partnerIcon : customerIcon}
+              icon={loc.type === 'shop' ? shopIcon : loc.type === 'partner' ? getPartnerIcon(loc.id, result, vehicleType) : customerIcon}
             >
               <Popup>
                 <div className="text-center font-sans">
@@ -119,7 +156,7 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
                   {stopInfo && (
                     <div className="mt-2">
                       <span className="bg-blue-100 text-blue-800 rounded px-2 py-1 text-xs font-bold inline-block">
-                        Route Stop #{stopInfo.stopNum}
+                        Route Stop #{stopInfo.stopNum} {stopInfo.partnerName ? `(${stopInfo.partnerName})` : ''}
                       </span>
                     </div>
                   )}
@@ -209,11 +246,21 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
           })
         }
 
-        {/* Previous Faded Route */}
-        {previousRoute && <RouteVisualizer result={previousRoute} isPrevious={true} />}
+        {/* Previous Faded Routes */}
+        {previousRoute && previousRoute.routes && Object.values(previousRoute.routes).map((route, idx) => (
+          <RouteVisualizer key={`prev-route-${route.partner_id}`} result={route} isPrevious={true} vehicleIndex={idx} />
+        ))}
 
-        {/* Active Route */}
-        {result && <RouteVisualizer result={result} isPrevious={false} />}
+        {/* Active Routes */}
+        {result && result.routes && Object.values(result.routes).map((route) => (
+          <RouteVisualizer 
+            key={`act-route-${route.partner_id}`} 
+            result={route} 
+            isPrevious={false} 
+            vehicleIndex={route.vehicle_index} 
+            vehicleType={vehicleType}
+          />
+        ))}
 
       </MapContainer>
 
@@ -223,10 +270,26 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
           <div className="font-bold text-slate-800 tracking-wider uppercase text-[10px] border-b border-slate-100 pb-1.5">
             🚦 AI Route Orchestrator
           </div>
-          <div className="flex items-center gap-3">
-            <span className="w-5 h-2 rounded-full bg-[#22c55e] inline-block shadow-sm shadow-green-500/50"></span>
-            <span className="font-semibold text-slate-700">AI Optimized Route</span>
-          </div>
+          {result.routes && Object.values(result.routes).map((route) => {
+            const vehicleColors = ['#22c55e', '#f97316', '#a855f7', '#eab308', '#64748b', '#000000', '#d97706'];
+            const vIdx = route.vehicle_index !== undefined ? route.vehicle_index : 0;
+            const color = vehicleColors[vIdx % vehicleColors.length] || '#22c55e';
+            const partnerName = route.partner_id.startsWith('part') 
+              ? `Partner ${route.partner_id.slice(4)}` 
+              : route.partner_id;
+            return (
+              <div key={route.partner_id} className="flex items-center gap-3">
+                <span 
+                  className="w-5 h-2 rounded-full inline-block shadow-sm" 
+                  style={{ 
+                    backgroundColor: color, 
+                    boxShadow: `0 1px 3px ${color}80` 
+                  }}
+                />
+                <span className="font-semibold text-slate-700">{partnerName} Route</span>
+              </div>
+            );
+          })}
           <div className="flex items-center gap-3">
             <span className="w-5 h-2 rounded-full bg-[#ef4444] border-dashed border border-red-500 inline-block shadow-sm shadow-red-500/50 animate-pulse"></span>
             <span className="font-semibold text-slate-700">Future Congestion Avoided</span>

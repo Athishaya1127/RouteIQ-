@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Polyline, Tooltip, useMap, Marker } from 'react-leaflet';
 import L from 'leaflet';
+import { VEHICLES_CONFIG } from './Sidebar';
 
-const RouteVisualizer = ({ result, isPrevious = false }) => {
+const RouteVisualizer = ({ result, isPrevious = false, vehicleIndex = 0, vehicleType }) => {
   const map = useMap();
 
   useEffect(() => {
@@ -13,6 +14,90 @@ const RouteVisualizer = ({ result, isPrevious = false }) => {
   }, [result, map]);
 
   if (!result) return null;
+
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [bearing, setBearing] = useState(0);
+
+  const geom = result.full_route_geometry || [];
+
+  // Reset animation when geometry changes
+  useEffect(() => {
+    setCurrentIdx(0);
+    setBearing(0);
+  }, [result]);
+
+  // Periodic ticker for moving the bike along the route geometry
+  useEffect(() => {
+    if (isPrevious || geom.length < 2) return;
+
+    const interval = setInterval(() => {
+      setCurrentIdx((prevIdx) => {
+        const nextIdx = (prevIdx + 1) % geom.length;
+        
+        // Calculate bearing between current point and next point
+        const p1 = geom[prevIdx];
+        const p2 = geom[nextIdx];
+        if (p1 && p2) {
+          const lat1 = p1[0] * Math.PI / 180;
+          const lon1 = p1[1] * Math.PI / 180;
+          const lat2 = p2[0] * Math.PI / 180;
+          const lon2 = p2[1] * Math.PI / 180;
+
+          const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+          const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+          const brng = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+          
+          // Emojis typically face left (bearing 270). Align to North by adding 90 degrees.
+          setBearing((brng + 90) % 360);
+        }
+        
+        return nextIdx;
+      });
+    }, 350); // Progress along route every 350ms
+
+    return () => clearInterval(interval);
+  }, [geom, isPrevious]);
+
+  const renderMovingVehicle = () => {
+    if (isPrevious || geom.length === 0 || !geom[currentIdx]) return null;
+
+    const vehicleColors = ['#22c55e', '#f97316', '#a855f7', '#eab308', '#64748b', '#000000', '#d97706'];
+    const vIdx = result.vehicle_index !== undefined ? result.vehicle_index : vehicleIndex;
+    const color = vehicleColors[vIdx % vehicleColors.length] || '#22c55e';
+
+    const emoji = VEHICLES_CONFIG[vehicleType]?.emoji || '🛵';
+
+    const markerHtml = `
+      <div class="moving-bike-marker-container" style="transform: rotate(${bearing}deg); --partner-color: ${color};">
+        <div class="moving-bike-tail"></div>
+        <div class="moving-bike-bg">
+          <span class="moving-bike-emoji">${emoji}</span>
+        </div>
+      </div>
+    `;
+
+    const movingIcon = L.divIcon({
+      html: markerHtml,
+      className: 'moving-bike-div-icon',
+      iconSize: [46, 46],
+      iconAnchor: [23, 23]
+    });
+
+    return (
+      <Marker 
+        position={geom[currentIdx]} 
+        icon={movingIcon} 
+        zIndexOffset={1000}
+      >
+        <Tooltip permanent direction="top" offset={[0, -22]}>
+          <div className="font-sans font-semibold text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded shadow-lg flex items-center gap-1.5 opacity-90 border border-slate-750">
+            <span>{emoji} Partner {result.partner_id ? result.partner_id.slice(4) : ''}</span>
+            <span className="bg-indigo-600 px-1 rounded text-[8px] font-extrabold">{Math.round((currentIdx / (geom.length - 1)) * 100)}%</span>
+          </div>
+        </Tooltip>
+      </Marker>
+    );
+  };
 
   const formatLabel = (id) => {
     if (id.startsWith('shop')) return `Shop ${id.slice(4)}`;
@@ -91,8 +176,10 @@ const RouteVisualizer = ({ result, isPrevious = false }) => {
         opacity = 0.35;
         dashArray = '5, 10';
       } else {
-        // Premium Neon Green for AI Optimized route
-        color = '#22c55e';
+        // Dynamic multi-vehicle colors
+        const vehicleColors = ['#22c55e', '#f97316', '#a855f7', '#eab308', '#64748b', '#000000', '#d97706'];
+        const vIdx = result.vehicle_index !== undefined ? result.vehicle_index : vehicleIndex;
+        color = vehicleColors[vIdx % vehicleColors.length] || '#22c55e';
         weight = 8;
         opacity = 1.0;
         dashArray = undefined;
@@ -215,6 +302,9 @@ const RouteVisualizer = ({ result, isPrevious = false }) => {
 
       {/* 2. Show Active Route in Neon Green */}
       {renderActiveRoute()}
+
+      {/* 3. Moving Bike/Vehicle Animation Overlay */}
+      {renderMovingVehicle()}
     </>
   );
 };

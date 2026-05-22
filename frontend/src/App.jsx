@@ -19,6 +19,7 @@ function App() {
   const [selectedPartnerForOpt, setSelectedPartnerForOpt] = useState('');
   const [selectedShopForOpt, setSelectedShopForOpt] = useState('');
   const [departureHour, setDepartureHour] = useState(9);
+  const [vehicleType, setVehicleType] = useState('scooter');
 
   // Counters for human readable IDs
   const [shopCounter, setShopCounter] = useState(0);
@@ -57,9 +58,11 @@ function App() {
   }, [optimizationResult, isLoading, locations, selectedPartnerForOpt, selectedShopForOpt]);
 
   const handleAddLocation = (latlng) => {
-    if (placementMode === 'customer' && !selectedShopForCustomers) {
-      setError("Please select a shop for the customer first.");
-      return;
+    let shopId = selectedShopForCustomers;
+    if (placementMode === 'customer' && !shopId) {
+      const activeShop = selectedShopForOpt || locations.find(l => l.type === 'shop')?.id || 'shop1';
+      shopId = activeShop;
+      setSelectedShopForCustomers(activeShop);
     }
 
     setError(null);
@@ -82,11 +85,20 @@ function App() {
       lng: latlng.lng
     };
 
-    if (placementMode === 'customer') {
-      newLocation.shop_id = selectedShopForCustomers;
+    if (placementMode === 'customer' || placementMode === 'partner') {
+      newLocation.shop_id = shopId;
     }
 
-    setLocations([...locations, newLocation]);
+    const updatedLocations = [...locations, newLocation];
+    setLocations(updatedLocations);
+    
+    // Auto-select shop and partner if they are the first ones added
+    if (placementMode === 'shop' && !selectedShopForOpt) {
+      setSelectedShopForOpt(newId);
+      setSelectedShopForCustomers(newId);
+    } else if (placementMode === 'partner' && !selectedPartnerForOpt) {
+      setSelectedPartnerForOpt(newId);
+    }
   };
 
   const handleClear = () => {
@@ -106,8 +118,16 @@ function App() {
   const handleOptimize = async (isAutoReroute = false) => {
     // STEP 1 - BUTTON VALIDATION
     const customersForShop = locations.filter(loc => loc.type === 'customer' && loc.shop_id === selectedShopForOpt);
-    if (!selectedPartnerForOpt || !selectedShopForOpt) {
-      setError("Please select a Delivery Partner and a Shop to optimize.");
+    const partnersAvailable = locations.filter(
+      loc => loc.type === 'partner' && (!loc.shop_id || loc.shop_id === selectedShopForOpt)
+    );
+    
+    if (partnersAvailable.length === 0) {
+      setError("Please add at least one Delivery Partner for this shop on the map first.");
+      return;
+    }
+    if (!selectedShopForOpt) {
+      setError("Please select a Shop to optimize.");
       return;
     }
     if (customersForShop.length === 0) {
@@ -123,7 +143,7 @@ function App() {
 
     const payload = {
       locations: locations,
-      selected_partner_id: selectedPartnerForOpt,
+      selected_partner_id: selectedPartnerForOpt || partnersAvailable[0].id,
       selected_shop_id: selectedShopForOpt,
       departure_hour: departureHour
     };
@@ -170,6 +190,8 @@ function App() {
         setSelectedShopForOpt={setSelectedShopForOpt}
         departureHour={departureHour}
         setDepartureHour={setDepartureHour}
+        vehicleType={vehicleType}
+        setVehicleType={setVehicleType}
       />
       <div className="flex-1 relative">
         <MapDashboard
@@ -178,6 +200,7 @@ function App() {
           result={optimizationResult}
           previousRoute={previousRoute}
           simulationData={simulationData}
+          vehicleType={vehicleType}
         />
       </div>
       <AIPanel simulationData={simulationData} result={optimizationResult} />
