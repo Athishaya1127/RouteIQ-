@@ -250,6 +250,8 @@ async def optimize_route(request: OptimizeRequest):
                 macro_state = global_state.latest_simulation_state.get(closest_zone, {})
                 avg_congestion = macro_state.get("predicted_congestion", 0.15)
                 
+
+# Apply dynamic congestion multiplier to leg duration (e.g., 20% congestion → leg takes 20% longer) 
             if leg_coords and leg_segs:
                 leg_distance = sum(s["distance"] for s in leg_segs)
                 leg_duration = sum(s["duration"] for s in leg_segs)
@@ -270,7 +272,7 @@ async def optimize_route(request: OptimizeRequest):
                     leg_duration = leg_distance / (settings.AVERAGE_SPEED_KMPH / 60.0)
                     
             s_arrival = current_time_tracker.strftime("%I:%M %p")
-            
+            # RouteIQ optimization engine initialized
             segments.append({
                 "from_id": filtered_locations[from_idx].id,
                 "to_id": filtered_locations[to_idx].id,
