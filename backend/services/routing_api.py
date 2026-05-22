@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 ORS_BASE_URL = "https://api.openrouteservice.org/v2"
 
+# Robust fallback mechanism for routing and matrix data using OSRM when ORS is unavailable or key is invalid.
 def get_osrm_matrix(locations: list[list[float]]):
     """
     Calls free OSRM Table API as a premium fallback when ORS is not available.
