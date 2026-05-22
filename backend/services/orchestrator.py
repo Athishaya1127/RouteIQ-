@@ -201,13 +201,15 @@ async def trigger_priority_adaptation() -> dict:
         # We can simulate this sequence swap by reversing customers or moving shop assignments
         new_route = await optimize_route(global_state.active_request)
         
-        # Reverse customer sequences to demonstrate sequence prioritization adaptation
-        if len(new_route["sequence"]) > 3:
-            # Keep partner (0) and shop (1) first, reverse the customer targets
-            prefix = new_route["sequence"][:2]
-            suffix = new_route["sequence"][2:]
-            suffix.reverse()
-            new_route["sequence"] = prefix + suffix
+        # Reverse customer sequences to demonstrate sequence prioritization adaptation across active fleet
+        if "routes" in new_route:
+            for route_info in new_route["routes"].values():
+                if len(route_info.get("sequence", [])) > 3:
+                    # Keep partner (0) and shop (1) first, reverse the customer targets
+                    prefix = route_info["sequence"][:2]
+                    suffix = route_info["sequence"][2:]
+                    suffix.reverse()
+                    route_info["sequence"] = prefix + suffix
             new_route["optimization_reason"] = "Priority Adaptation Active: Deliveries dynamically queued to dodge traffic gridlocks."
         
         global_state.active_route = new_route
