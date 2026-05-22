@@ -8,6 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # RouteIQ- root
 ENV_PATH_BACKEND = BASE_DIR / "backend" / ".env"
 ENV_PATH_ROOT = BASE_DIR / ".env"
 
+
+# Dynamic congestion multiplier based on predicted delay
+
 env_path = None
 if ENV_PATH_BACKEND.exists():
     env_path = ENV_PATH_BACKEND
