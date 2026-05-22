@@ -64,40 +64,12 @@ def get_node_coords(node_id: str) -> list[float]:
 REAL_ROAD_GEOMETRIES = {}
 
 def get_interpolated_geometry(start_node: str, end_node: str) -> list[list[float]]:
-    """
-    Retrieves the actual street geometry between two Chennai junctions.
-    Uses cached OpenRouteService Directions API to follow real roads, with simple curve fallback.
-    """
-    key = (start_node, end_node)
-    rev_key = (end_node, start_node)
-    
-    if key in REAL_ROAD_GEOMETRIES:
-        return REAL_ROAD_GEOMETRIES[key]
-    if rev_key in REAL_ROAD_GEOMETRIES:
-        # Reverse geometry coordinate order
-        rev_geom = [coord.copy() for coord in REAL_ROAD_GEOMETRIES[rev_key]]
-        rev_geom.reverse()
-        return rev_geom
-
-    # Call ORS to fetch actual road coordinates
     c1 = get_node_coords(start_node)
     c2 = get_node_coords(end_node)
-    
-    try:
-        from backend.services.routing_api import get_full_route_details
-        leaflet_coords, _ = get_full_route_details([c1, c2])
-        if leaflet_coords:
-            REAL_ROAD_GEOMETRIES[key] = leaflet_coords
-            return leaflet_coords
-    except Exception as e:
-        print(f"[road_graph] Failed to fetch real street geometry: {e}")
-
-    # Fallback to simple curved line if API is rate-limited or fails
     mid = [(c1[0] + c2[0])/2, (c1[1] + c2[1])/2]
     mid[0] += 0.002
     mid[1] += 0.002
-    fallback_geom = [[c1[1], c1[0]], [mid[1], mid[0]], [c2[1], c2[0]]]
-    return fallback_geom
+    return [[c1[1], c1[0]], [mid[1], mid[0]], [c2[1], c2[0]]]
 
 
 def snap_location_to_graph(lat: float, lng: float) -> str:
