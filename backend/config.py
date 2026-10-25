@@ -39,18 +39,19 @@ class Settings:
         self.AVERAGE_SPEED_KMPH = float(os.getenv("AVERAGE_SPEED_KMPH", 30.0))
         self.DELAY_THRESHOLD_MINS = float(os.getenv("DELAY_THRESHOLD_MINS", 45.0))
         self.DELAY_PENALTY_COST = float(os.getenv("DELAY_PENALTY_COST", 50.0))
+        self.COST_WEIGHT_DURATION = float(os.getenv("COST_WEIGHT_DURATION", 0.4))
+        self.COST_WEIGHT_DISTANCE = float(os.getenv("COST_WEIGHT_DISTANCE", 0.2))
+        self.COST_WEIGHT_DELAY = float(os.getenv("COST_WEIGHT_DELAY", 0.3))
+        self.COST_WEIGHT_CONGESTION = float(os.getenv("COST_WEIGHT_CONGESTION", 0.1))
+        self.CONGESTION_PENALTY_THRESHOLD = float(os.getenv("CONGESTION_PENALTY_THRESHOLD", 0.6))
+        self.MAX_ROUTE_DURATION_MINS = int(os.getenv("MAX_ROUTE_DURATION_MINS", 720))
+        self.OPTIMIZER_TIME_LIMIT_SECONDS = int(os.getenv("OPTIMIZER_TIME_LIMIT_SECONDS", 5))
 
 settings = Settings()
 
 # 5. Runtime Validation
 if not settings.ORS_API_KEY:
-    raise RuntimeError(
-        "\n\n🚨 CRITICAL STARTUP ERROR: ORS_API_KEY is missing!\n"
-        "Failed to load the OpenRouteService API key.\n"
-        "Please ensure your .env file exists and contains:\n"
-        "ORS_API_KEY=your_key_here\n"
-        f"Expected .env location: {ENV_PATH_ROOT} OR {ENV_PATH_BACKEND}\n\n"
-    )
+    print("[CONFIG] WARNING: ORS_API_KEY is not configured. RouteIQ will use OSRM fallbacks where available.")
 else:
     # Print sanitized confirmation
     key_length = len(settings.ORS_API_KEY)

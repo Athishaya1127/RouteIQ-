@@ -8,4 +8,5 @@ python-dotenv
 httpx
 sqlalchemy
 scikit-learn
+pandas
 websockets

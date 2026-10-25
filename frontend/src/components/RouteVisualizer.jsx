@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Polyline, Tooltip, useMap, Marker } from 'react-leaflet';
 import L from 'leaflet';
-import { VEHICLES_CONFIG } from './Sidebar';
+import { VEHICLES_CONFIG } from '../utils/vehicleModes';
 
 const RouteVisualizer = ({ result, isPrevious = false, vehicleIndex = 0, vehicleType }) => {
   const map = useMap();
@@ -13,12 +13,10 @@ const RouteVisualizer = ({ result, isPrevious = false, vehicleIndex = 0, vehicle
     }
   }, [result, map]);
 
-  if (!result) return null;
-
   const [currentIdx, setCurrentIdx] = useState(0);
   const [bearing, setBearing] = useState(0);
 
-  const geom = result.full_route_geometry || [];
+  const geom = useMemo(() => result?.full_route_geometry || [], [result?.full_route_geometry]);
 
   // Reset animation when geometry changes
   useEffect(() => {
@@ -57,6 +55,8 @@ const RouteVisualizer = ({ result, isPrevious = false, vehicleIndex = 0, vehicle
 
     return () => clearInterval(interval);
   }, [geom, isPrevious]);
+
+  if (!result) return null;
 
   const renderMovingVehicle = () => {
     if (isPrevious || geom.length === 0 || !geom[currentIdx]) return null;
@@ -167,7 +167,6 @@ const RouteVisualizer = ({ result, isPrevious = false, vehicleIndex = 0, vehicle
       let weight = 4;
       let opacity = 0.4;
       let dashArray = '5, 10';
-      let className = '';
 
       if (isPrevious) {
         // Faded legacy path

@@ -1,13 +1,6 @@
 import React from 'react';
-import { Play, Trash2, MapPin, Loader, AlertTriangle, CheckCircle, Route } from 'lucide-react';
-
-export const VEHICLES_CONFIG = {
-  scooter: { name: 'Moto (Scooter)', emoji: '🛵', etaMultiplier: 1.0, costMultiplier: 1.0, desc: 'Rapido Bike - Fast, standard rate' },
-  motorcycle: { name: 'Moto (Sports)', emoji: '🏍️', etaMultiplier: 0.85, costMultiplier: 1.25, desc: 'Express Motorcycle - Faster ETA' },
-  bicycle: { name: 'Eco (Bicycle)', emoji: '🚲', etaMultiplier: 1.8, costMultiplier: 0.5, desc: 'Eco Delivery - Green, lowest cost' },
-  auto: { name: 'Auto Rickshaw', emoji: '🛺', etaMultiplier: 1.15, costMultiplier: 1.4, desc: 'Medium Cargo - Good in traffic' },
-  car: { name: 'Premium (Taxi)', emoji: '🚗', etaMultiplier: 1.3, costMultiplier: 2.2, desc: 'Uber Go Sedan - Premium rate' }
-};
+import { Play, Trash2, Loader, AlertTriangle, CheckCircle, Route } from 'lucide-react';
+import { formatRouteDuration, VEHICLES_CONFIG } from '../utils/vehicleModes';
 
 const Sidebar = ({ 
   locations, onClear, onOptimize, isLoading, error, successMessage, result, previousRoute,
@@ -29,7 +22,6 @@ const Sidebar = ({
 
   const config = VEHICLES_CONFIG[vehicleType] || VEHICLES_CONFIG.scooter;
 
-  const getModifiedDuration = (baseDuration) => (baseDuration * config.etaMultiplier).toFixed(1);
   const getModifiedFuel = (baseFuel) => (baseFuel * config.costMultiplier).toFixed(0);
   const getModifiedCost = (baseCost) => {
     if (typeof baseCost === 'string') {
@@ -67,24 +59,33 @@ const Sidebar = ({
         <div>
           <div className="bg-slate-50 p-1.5 rounded-lg flex border border-slate-200">
             <button 
+              type="button"
               onClick={() => setPlacementMode('shop')}
+              aria-pressed={placementMode === 'shop'}
               className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${placementMode === 'shop' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Shop
             </button>
             <button 
+              type="button"
               onClick={() => setPlacementMode('customer')}
+              aria-pressed={placementMode === 'customer'}
               className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${placementMode === 'customer' ? 'bg-white shadow-sm text-red-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Customer
             </button>
             <button 
+              type="button"
               onClick={() => setPlacementMode('partner')}
+              aria-pressed={placementMode === 'partner'}
               className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${placementMode === 'partner' ? 'bg-white shadow-sm text-green-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Partner
             </button>
           </div>
+          <p className="mt-2 text-xs text-slate-600">
+            Click the map to add a {placementMode}. Click an existing marker to select it.
+          </p>
           
           {(placementMode === 'customer' || placementMode === 'partner') && (
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mt-3">
@@ -98,9 +99,12 @@ const Sidebar = ({
               >
                 <option value="" disabled>Select a Shop</option>
                 {shops.map(shop => (
-                  <option key={shop.id} value={shop.id}>{shop.id}</option>
+                  <option key={shop.id} value={shop.id}>{formatLabel(shop.id)}</option>
                 ))}
               </select>
+              {shops.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">Add a shop first by selecting Shop and clicking the map.</p>
+              )}
             </div>
           )}
         </div>
@@ -118,9 +122,12 @@ const Sidebar = ({
               >
                 <option value="" disabled>Select Partner</option>
                 {partners.map(p => (
-                  <option key={p.id} value={p.id}>{p.id}</option>
+                  <option key={p.id} value={p.id}>{formatLabel(p.id)}</option>
                 ))}
               </select>
+              {partners.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">Select Partner above, then click the map to add one.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-blue-800 mb-1">Target Shop</label>
@@ -131,9 +138,12 @@ const Sidebar = ({
               >
                 <option value="" disabled>Select Shop</option>
                 {shops.map(shop => (
-                  <option key={shop.id} value={shop.id}>{shop.id}</option>
+                  <option key={shop.id} value={shop.id}>{formatLabel(shop.id)}</option>
                 ))}
               </select>
+              {shops.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">Add a shop on the map to make it selectable.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-blue-800 mb-1">Departure Hour</label>
@@ -175,7 +185,9 @@ const Sidebar = ({
               </div>
               <div className="text-[10px] text-slate-500 bg-white/70 p-2 rounded border border-blue-100/50 leading-relaxed italic shadow-inner">
                 {config.desc} <br/>
-                <span className="font-semibold text-blue-700">Speed: {config.etaMultiplier}x</span> • <span className="font-semibold text-green-700">Cost: {config.costMultiplier}x</span>
+                <span className="font-semibold text-blue-700">Route duration and arrival times use backend estimates and are not changed by this mode.</span>
+                <br/>
+                <span className="font-semibold text-green-700">Display cost factor: {config.costMultiplier}x</span>
               </div>
             </div>
 
@@ -289,7 +301,7 @@ const Sidebar = ({
                       </div>
                       <div className="bg-slate-50 p-2 rounded">
                         <p className="text-xs text-slate-500 uppercase tracking-wider">Fleet Max Time</p>
-                        <p className="font-medium text-slate-900">{getModifiedDuration(result.total_duration)} min</p>
+                        <p className="font-medium text-slate-900">{formatRouteDuration(result.total_duration)} min</p>
                       </div>
                       <div className="bg-slate-50 p-2 rounded">
                         <p className="text-xs text-slate-500 uppercase tracking-wider">Fleet Fuel</p>
@@ -312,7 +324,7 @@ const Sidebar = ({
                           <div key={pId} className="bg-slate-50 p-2 rounded border border-slate-200/60 text-xs">
                             <div className="font-bold text-indigo-700 flex justify-between">
                               <span>{pName}</span>
-                              <span className="text-slate-500 font-normal">{r.total_distance} km • {getModifiedDuration(r.total_duration)} min</span>
+                              <span className="text-slate-500 font-normal">{r.total_distance} km • {formatRouteDuration(r.total_duration)} min</span>
                             </div>
                             <div className="text-slate-600 mt-1">
                               {custs.length > 0 ? (
@@ -348,7 +360,7 @@ const Sidebar = ({
                         </div>
                         <div className="bg-slate-50 p-2 rounded">
                           <p className="text-xs text-slate-500 uppercase tracking-wider">Est. Time</p>
-                          <p className="font-medium text-slate-900">{getModifiedDuration(activeRoute.total_duration)} min</p>
+                          <p className="font-medium text-slate-900">{formatRouteDuration(activeRoute.total_duration)} min</p>
                         </div>
                         <div className="bg-slate-50 p-2 rounded">
                           <p className="text-xs text-slate-500 uppercase tracking-wider">Fuel Cost</p>
@@ -410,7 +422,7 @@ const Sidebar = ({
                                     <div className="flex gap-2 text-slate-500 font-medium">
                                       <span>{segment.distance.toFixed(1)} km</span>
                                       <span>•</span>
-                                      <span>{getModifiedDuration(segment.duration)} min</span>
+                                      <span>{formatRouteDuration(segment.duration)} min</span>
                                     </div>
                                     
                                     <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded uppercase tracking-wider

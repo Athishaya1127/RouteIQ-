@@ -114,7 +114,9 @@ async def run_simulation():
                 # Update global state for routing engine
                 global_state.latest_simulation_state[zone] = {
                     "current_congestion": congestion,
-                    "predicted_congestion": predicted_congestion
+                    "predicted_congestion": predicted_congestion,
+                    "vehicle_density": density,
+                    "avg_speed": avg_speed
                 }
 
             db.commit()

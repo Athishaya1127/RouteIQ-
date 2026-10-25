@@ -8,6 +8,8 @@ from sklearn.ensemble import RandomForestRegressor
 class RoadPredictor:
     def __init__(self):
         self.model = None
+        self.model_uses_zone = False
+        self.training_source = "synthetic_fallback"
         self._load_or_train()
 
     def _load_or_train(self):
@@ -15,11 +17,18 @@ class RoadPredictor:
         if os.path.exists(model_path):
             try:
                 with open(model_path, "rb") as f:
-                    self.model = pickle.load(f)
-                print("[RouteIQ] Loaded existing road-level ML predictor.")
+                    saved_model = pickle.load(f)
+                if isinstance(saved_model, dict) and "model" in saved_model:
+                    self.model = saved_model["model"]
+                    self.model_uses_zone = "zone" in saved_model.get("features", [])
+                    self.training_source = saved_model.get("training_source", "unverified")
+                else:
+                    self.model = saved_model
+                    self.training_source = "legacy_synthetic_model"
+                print(f"[RouteIQ] Loaded road-level ML predictor ({self.training_source}).")
                 return
-            except Exception as e:
-                print(f"[RouteIQ Warning] Failed to load road predictor: {e}. Re-training...")
+            except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ValueError, TypeError) as e:
+                print(f"[RouteIQ Warning] Failed to load road predictor: {e}. Using synthetic fallback.")
 
         # No model or error loading, let's train a high-fidelity synthetic model
         print("[RouteIQ] Training new Time-Dependent Road Predictor model...")
@@ -73,15 +82,33 @@ class RoadPredictor:
 
         self.model = RandomForestRegressor(n_estimators=30, random_state=42, n_jobs=-1)
         self.model.fit(X, y)
+        self.training_source = "synthetic_fallback"
 
         try:
             with open(save_path, "wb") as f:
-                pickle.dump(self.model, f)
+                pickle.dump(
+                    {
+                        "model": self.model,
+                        "features": ["hour", "day", "hist", "speed", "neighbor", "upstream"],
+                        "training_source": self.training_source,
+                    },
+                    f,
+                )
             print("[RouteIQ] Successfully trained and saved time-dependent road predictor.")
-        except Exception as e:
+        except OSError as e:
             print(f"[RouteIQ Error] Could not save trained model: {e}")
 
-    def predict_congestion(self, hour: int, day: int, hist: float, speed: float, neighbor: float, upstream: float) -> float:
+    def predict_congestion(
+        self,
+        hour: int,
+        day: int,
+        hist: float,
+        speed: float,
+        neighbor: float,
+        upstream: float,
+        zone: str = "",
+        density: float = 0.3,
+    ) -> float:
         """
         Predicts future congestion at a specific future arrival time (hour/day).
         """
@@ -95,14 +122,20 @@ class RoadPredictor:
                 base = max(0.1, base - 0.1)
             return base
 
-        input_df = pd.DataFrame([{
+        features = {
             "hour": hour,
             "day": day,
             "hist": hist,
             "speed": speed,
-            "neighbor": neighbor,
-            "upstream": upstream
-        }])
+        }
+        if self.model_uses_zone:
+            features["zone"] = zone
+            features["density"] = density
+        else:
+            features["neighbor"] = neighbor
+            features["upstream"] = upstream
+
+        input_df = pd.DataFrame([features])
         
         pred = self.model.predict(input_df)[0]
         return float(max(0.1, min(pred, 0.95)))

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import MapDashboard from './components/MapDashboard';
 import Sidebar from './components/Sidebar';
 import AIPanel from './components/AIPanel';
@@ -101,6 +101,21 @@ function App() {
     }
   };
 
+  const handleSelectLocation = (location) => {
+    if (location.type === 'shop') {
+      setSelectedShopForOpt(location.id);
+      setSelectedShopForCustomers(location.id);
+    } else if (location.type === 'partner') {
+      setSelectedPartnerForOpt(location.id);
+      if (location.shop_id && locations.some(loc => loc.id === location.shop_id && loc.type === 'shop')) {
+        setSelectedShopForOpt(location.shop_id);
+      }
+    } else if (location.type === 'customer' && location.shop_id) {
+      setSelectedShopForCustomers(location.shop_id);
+      setSelectedShopForOpt(location.shop_id);
+    }
+  };
+
   const handleClear = () => {
     setLocations([]);
     setOptimizationResult(null);
@@ -197,6 +212,7 @@ function App() {
         <MapDashboard
           locations={locations}
           onAddLocation={handleAddLocation}
+          onSelectLocation={handleSelectLocation}
           result={optimizationResult}
           previousRoute={previousRoute}
           simulationData={simulationData}
@@ -209,4 +225,3 @@ function App() {
 }
 
 export default App;
-

@@ -1,7 +1,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import RouteVisualizer from './RouteVisualizer';
-import { VEHICLES_CONFIG } from './Sidebar';
+import { VEHICLES_CONFIG } from '../utils/vehicleModes';
 
 // Fix for default Leaflet icons in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -71,7 +71,7 @@ const MapEvents = ({ onAddLocation }) => {
   return null;
 };
 
-const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulationData, vehicleType }) => {
+const MapDashboard = ({ locations, onAddLocation, onSelectLocation, result, previousRoute, simulationData, vehicleType }) => {
   const defaultCenter = [13.0827, 80.2707];
 
   const ZONES_COORDS = {
@@ -118,7 +118,8 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          subdomains="abc"
         />
 
         <MapEvents onAddLocation={onAddLocation} />
@@ -138,6 +139,9 @@ const MapDashboard = ({ locations, onAddLocation, result, previousRoute, simulat
               key={loc.id}
               position={[loc.lat, loc.lng]}
               icon={loc.type === 'shop' ? shopIcon : loc.type === 'partner' ? getPartnerIcon(loc.id, result, vehicleType) : customerIcon}
+              eventHandlers={{
+                click: () => onSelectLocation(loc)
+              }}
             >
               <Popup>
                 <div className="text-center font-sans">

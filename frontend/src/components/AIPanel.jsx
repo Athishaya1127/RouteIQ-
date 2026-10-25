@@ -1,4 +1,3 @@
-import React from 'react';
 import { ShieldAlert, Zap, Compass, RefreshCw, Layers } from 'lucide-react';
 
 const AIPanel = ({ simulationData, result }) => {
